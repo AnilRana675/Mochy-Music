@@ -55,6 +55,7 @@ fun IntegrationsScreen(navController: NavController) {
                 iconBackground = YouTubeMusicRed,
                 onClick = { navController.navigate(YouTubeSyncRoute) },
             )
+            com.mochyfork.mftelegram.ui.MfIntegrationRows(navController) // mf-hook
         }
 
         Spacer(Modifier.height(140.dp))

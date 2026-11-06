@@ -408,6 +408,7 @@ fun NavGraphBuilder.navigationBuilder(
     composable(com.mochyy.mochymusic.ui.screens.settings.integrations.discord.DiscordRoute) {
         com.mochyy.mochymusic.ui.screens.settings.integrations.discord.DiscordScreen(navController = navController)
     }
+    composable(com.mochyfork.mftelegram.ui.MfChannelLibraryRoute) { com.mochyfork.mftelegram.ui.MfChannelLibraryScreen(navController) } // mf-hook
 
     composable(
         route = com.mochyy.mochymusic.ui.screens.settings.integrations.ScrobbleServiceRoute,
