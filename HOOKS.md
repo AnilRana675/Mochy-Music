@@ -5,4 +5,4 @@ Re-apply these after an upstream merge conflict.
 
 | File | Line purpose | Tag |
 |---|---|---|
-| (none yet) | | `yn-hook` |
+| `settings.gradle.kts` | `include(":mf-telegram")` — registers our Telegram module in the build | `mf-hook` |

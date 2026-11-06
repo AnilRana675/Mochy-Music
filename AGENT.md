@@ -35,7 +35,7 @@ Add a built-in module like this (same as upstream does):
 ## Hooks (upstream file edits)
 
 - Max 1 to 3 lines per hook. Prefer one call into our own file.
-- Mark every hook with a one-line comment: `// yn-hook: <reason>`
+- Mark every hook with a one-line comment: `// mf-hook: <reason>`
 - Keep a list of all hooks in `HOOKS.md` (file, line purpose). Update it in the same commit.
 - Never move, rename or reformat upstream code around a hook.
 
@@ -53,9 +53,9 @@ Add a built-in module like this (same as upstream does):
 
 | Thing | Rule |
 |---|---|
-| Our package | `com.yetinova.mochyfork` style, separate from `com.mochyy.mochymusic` (pick one and keep it) |
-| Preference keys | prefix `yn_` |
-| Resources | our own files: `res/values/yn_strings.xml`, `yn_colors.xml` |
+| Our package | `com.mochyfork.*`, separate from `com.mochyy.mochymusic` (pick one and keep it) |
+| Preference keys | prefix `mf_` |
+| Resources | our own files: `res/values/mf_strings.xml`, `mf_colors.xml` |
 | Database | own Room DB or own tables. Never edit upstream entities or migrations |
 | Feature flags | every feature behind a flag. Off by default until stable |
 

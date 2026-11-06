@@ -42,6 +42,9 @@ include(":modules:applemusic")
 include(":modules:monochrome")
 include(":modules:jiosaavn")
 
+// mf-hook: our own telegram channel playback engine (tdlib wrapper, index, loopback stream server)
+include(":mf-telegram")
+
 
 // local newpipe extractor
 //includeBuild("../NewPipeExtractor") {
