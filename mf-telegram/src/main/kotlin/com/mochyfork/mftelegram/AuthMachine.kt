@@ -3,6 +3,7 @@
 package com.mochyfork.mftelegram
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,14 +26,10 @@ class AuthMachine(private val port: TdPort, private val scope: CoroutineScope) {
 
     /** watch tdlib authorization state and answer required registration terms once */
     fun start() {
-        println("DEBUG_START_CALLED")
-        scope.launch {
-            println("DEBUG_INSIDE_LAUNCH")
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             port.updates.collect { update ->
-                println("DEBUG_UPDATE: $update")
                 if (update !is TdApi.UpdateAuthorizationState) return@collect
                 val newState = authStateOf(update.authorizationState)
-                println("DEBUG_NEW_STATE: $newState")
                 _state.value = newState
                 when (val state = update.authorizationState) {
                     is TdApi.AuthorizationStateClosed -> errors.value = null

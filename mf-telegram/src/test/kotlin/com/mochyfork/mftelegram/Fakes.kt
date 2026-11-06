@@ -33,7 +33,7 @@ class FakeTdPort : TdPort {
     override suspend fun <T : TdApi.Object> send(function: TdApi.Function<T>): TdApi.Object {
         sent += function
         for (handler in handlers) {
-            val res = runCatching { handler(function) }.getOrNull()
+            val res = handler(function)
             if (res != null) return res
         }
         throw TdError(400, "unexpected ${function::class.simpleName}")

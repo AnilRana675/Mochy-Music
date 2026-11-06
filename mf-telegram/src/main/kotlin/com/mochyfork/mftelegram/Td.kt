@@ -15,8 +15,10 @@ interface TdPort {
 class TdError(
     val code: Int,
     override val message: String,
-    val retryAfter: Int = 0,
-) : Exception(message)
+    retryAfter: Int = 0,
+) : Exception(message) {
+    val retryAfter: Int = retryAfter.takeIf { it > 0 } ?: parseRetryAfter(message)
+}
 
 // auth lifecycle of the tdlib client, as the ui sees it
 sealed interface AuthState {
@@ -39,9 +41,13 @@ fun authStateOf(state: TdApi.AuthorizationState): AuthState = when (state) {
     else -> AuthState.Starting
 }
 
-// walk a tdapi error to a flood-wait count. message form: "Too Many Requests: retry after 30"
-fun parseRetryAfter(message: String): Int =
-    Regex("""retry after (\d+)""").find(message.lowercase())?.groupValues?.get(1)?.toIntOrNull() ?: 0
+// walk tdlib's flood-wait error formats to a retry count.
+fun parseRetryAfter(message: String): Int {
+    val normalized = message.lowercase()
+    return Regex("""flood_wait_(\d+)""").find(normalized)?.groupValues?.get(1)?.toIntOrNull()
+        ?: Regex("""retry after\s+(\d+)""").find(normalized)?.groupValues?.get(1)?.toIntOrNull()
+        ?: 0
+}
 
 // tdlib's stable per-file key; local file ids change on every restart, this does not
 val TdApi.RemoteFile.stableKey: String get() = uniqueId

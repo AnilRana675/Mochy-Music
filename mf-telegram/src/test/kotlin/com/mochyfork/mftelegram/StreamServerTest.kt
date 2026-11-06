@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -161,22 +161,17 @@ class StreamServerTest {
         assertTrue(System.nanoTime() - startedAt < TimeUnit.SECONDS.toNanos(12))
     }
 
-    @Test fun cancelRunsWhenTheReaderWalksAwayMidTransfer() {
-        // big body: once the reader stops reading, server writes hit a full socket buffer,
-        // then the close turns into an IOException and the download gets cancelled
+    @Test     fun cancelRunsWhenTheReaderWalksAwayMidTransfer() {
+        source.blockForever = true
         val tuple = rawRequest("bytes=0-", grabFirstBytes = false)
         val reader = tuple.first
         val socket = tuple.second
         assertEquals(true, reader.readLine().contains("206"))
         readHeaders(reader)
-        // read a little, then walk away without draining the body
-        socket.getInputStream().read(ByteArray(4))
+        assertTrue(source.downloadStarted.await(5, TimeUnit.SECONDS))
         socket.close()
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (System.nanoTime() < deadline && source.cancelCalls.isEmpty()) {
-            Thread.sleep(50)
-        }
-        assertTrue("server never noticed the gone reader", source.cancelCalls.isNotEmpty())
+        source.releaseDownload.countDown()
+        assertTrue("server never noticed the gone reader", source.cancelObserved.await(5, TimeUnit.SECONDS))
     }
 }
 
@@ -190,7 +185,9 @@ class FakeSource(
     val cancelCalls = mutableListOf<String>()
     var fail = false
     var blockForever = false
-    private var gate: CompletableFuture<Unit>? = null
+    val downloadStarted = CountDownLatch(1)
+    val cancelObserved = CountDownLatch(1)
+    val releaseDownload = CountDownLatch(1)
 
     override suspend fun meta(uniqueId: String): FileSource.Meta? {
         // unknown ids look unknown; the known id gives the true file size
@@ -201,9 +198,8 @@ class FakeSource(
         if (fail) return false
         downloadCalls += from to untilExclusive
         if (blockForever) {
-            val g = CompletableFuture<Unit>()
-            gate = g
-            g.get()
+            downloadStarted.countDown()
+            releaseDownload.await()
         }
         val fc = store.obtain(uniqueId)
         var at = from
@@ -223,7 +219,6 @@ class FakeSource(
 
     override fun cancel(uniqueId: String) {
         cancelCalls += uniqueId
-        gate?.complete(Unit)
-        gate = null
+        cancelObserved.countDown()
     }
 }

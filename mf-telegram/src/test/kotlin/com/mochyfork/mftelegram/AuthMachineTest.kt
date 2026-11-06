@@ -7,6 +7,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 
 class AuthMachineTest {
     @Test fun retryAfterParsesFromTheMessage() {
@@ -24,13 +26,13 @@ class AuthMachineTest {
 
     @Test fun phoneCodeAndPasswordGoOutOneAtATime() = kotlinx.coroutines.test.runTest {
         val port = FakeTdPort()
-        val machine = AuthMachine(port, this)
+        val machine = AuthMachine(port, kotlinx.coroutines.CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
         machine.start()
         testScheduler.advanceUntilIdle()
         port.updates.emit(TdApi.UpdateAuthorizationState().apply {
             authorizationState = TdApi.AuthorizationStateWaitPhoneNumber()
         })
-        testScheduler.advanceUntilIdle()
+        runCurrent()
         assertEquals(AuthState.WaitPhoneNumber, machine.state.value)
 
         port.on<TdApi.SetAuthenticationPhoneNumber> { TdApi.Ok() }
@@ -59,7 +61,7 @@ class AuthMachineTest {
         port.updates.emit(TdApi.UpdateAuthorizationState().apply {
             authorizationState = TdApi.AuthorizationStateWaitPhoneNumber()
         })
-        testScheduler.advanceUntilIdle()
+        runCurrent()
         port.on<TdApi.SetAuthenticationPhoneNumber> {
             throw TdError(429, "Too Many Requests: retry after 60", 60)
         }

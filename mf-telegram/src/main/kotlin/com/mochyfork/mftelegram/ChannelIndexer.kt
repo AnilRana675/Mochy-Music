@@ -7,6 +7,7 @@ import com.mochyfork.mftelegram.db.ChannelEntity
 import com.mochyfork.mftelegram.db.TelegramDao
 import com.mochyfork.mftelegram.db.TrackEntity
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import org.drinkless.tdlib.TdApi
 
@@ -27,7 +28,7 @@ class ChannelIndexer(
 ) {
     /** keep the index live once started: new audio, replaced content, deletions */
     fun start() {
-        scope.launch {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             port.updates.collect { update ->
                 when (update) {
                     is TdApi.UpdateNewMessage -> onMessage(update.message)
@@ -47,6 +48,7 @@ class ChannelIndexer(
         listFrom(TdApi.ChatListMain()) + listFrom(TdApi.ChatListArchive())
         )
         .filter { it.type is TdApi.ChatTypeSupergroup && (it.type as TdApi.ChatTypeSupergroup).isChannel }
+        .distinctBy { it.id }
         .take(limit)
 
     private suspend fun listFrom(list: TdApi.ChatList): List<TdApi.Chat> {

@@ -4,6 +4,8 @@ package com.mochyfork.mftelegram
 import com.mochyfork.mftelegram.db.ChannelEntity
 import java.util.ArrayDeque
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withTimeout
 import org.drinkless.tdlib.TdApi
 import org.junit.Assert.assertEquals
@@ -118,14 +120,15 @@ class IndexerTest {
         val port = FakeTdPort()
         val dao = FakeDao()
         dao.upsertChannel(ChannelEntity(chatId, "channel", null, 0, 0, true, 0))
-        val indexer = ChannelIndexer(port, dao, backgroundScope)
+        val indexer = ChannelIndexer(port, dao, kotlinx.coroutines.CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
         indexer.start()
-        testScheduler.advanceUntilIdle()
+        runCurrent()
 
         // new audio message in the channel
         val up = TdApi.UpdateNewMessage().apply { message = message(300L, audio("u300", "Live Track")) }
         port.updates.emit(up)
-        dao.trackRows.awaitSize(this, 1)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, dao.trackRows.size)
         assertEquals("Live Track", dao.trackRows.values.first().title)
 
         // an unrelated channel does nothing
@@ -133,20 +136,24 @@ class IndexerTest {
             message = message(1L, audio("uX", "Elsewhere")).apply { chatId = 999 }
         }
         port.updates.emit(other)
+        testScheduler.advanceUntilIdle()
         assertEquals(1, dao.trackRows.size)
 
         // content replaced by a non-audio content type: dropped
         port.updates.emit(TdApi.UpdateMessageContent().apply {
-            chatId = chatId; messageId = 300L; newContent = TdApi.MessageText().apply { text = TdApi.FormattedText().apply { text = "x" } }
+            chatId = this@IndexerTest.chatId; messageId = 300L; newContent = TdApi.MessageText().apply { text = TdApi.FormattedText().apply { text = "x" } }
         })
+        testScheduler.advanceUntilIdle()
         assertTrue(dao.trackRows.isEmpty())
 
         // deletion after re-adding
         port.updates.emit(TdApi.UpdateNewMessage().apply { message = message(301L, audio("u301", "Two")) })
-        dao.trackRows.awaitSize(this, 1)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, dao.trackRows.size)
         port.updates.emit(TdApi.UpdateDeleteMessages().apply {
-            chatId = chatId; messageIds = longArrayOf(301L); fromCache = false
+            chatId = this@IndexerTest.chatId; messageIds = longArrayOf(301L); fromCache = false
         })
+        testScheduler.advanceUntilIdle()
         assertTrue(dao.trackRows.isEmpty())
     }
 

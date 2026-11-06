@@ -14,11 +14,13 @@ class TdRealPort : TdPort {
     override val updates: MutableSharedFlow<TdApi.Update> =
         MutableSharedFlow(extraBufferCapacity = 512, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    private val client: Client = Client.create(
-        { update: TdApi.Object -> (update as? TdApi.Update)?.let(updates::tryEmit) },
-        { /* td lib update exception */ },
-        { e: Throwable -> Log.error("td exception ${e.javaClass.simpleName}") },
-    )
+    private val client: Client by lazy {
+        Client.create(
+            { update: TdApi.Object -> (update as? TdApi.Update)?.let(updates::tryEmit) },
+            { /* td lib update exception */ },
+            { e: Throwable -> Log.error("td exception ${e.javaClass.simpleName}") },
+        )
+    }
 
     override suspend fun <T : TdApi.Object> send(function: TdApi.Function<T>): TdApi.Object {
         val done = CompletableDeferred<TdApi.Object>()
