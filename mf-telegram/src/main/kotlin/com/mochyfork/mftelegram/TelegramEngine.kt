@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.TimeoutCancellationException
@@ -47,8 +48,11 @@ class TelegramEngine(
     private var chunksRef: ChunkStore? = null
     private var fileSourceRef: TdFileSource? = null
     private val started = AtomicBoolean(false)
+    private val authStateFlow = MutableStateFlow<AuthState>(AuthState.Starting)
+    private val authErrorFlow = MutableStateFlow<String?>(null)
 
-    val auth: StateFlow<AuthState> get() = authMachineRef?.state ?: MutableStateFlow(AuthState.Starting)
+    val auth: StateFlow<AuthState> = authStateFlow
+    val authError: StateFlow<String?> = authErrorFlow
     val channels: Flow<List<ChannelEntity>> get() = db.dao().activeChannels()
     val syncState = MutableStateFlow<SyncState>(SyncState.Idle)
 
@@ -63,8 +67,12 @@ class TelegramEngine(
         val tdSource = TdFileSource(port!!, db.dao(), chunks, syncState)
         fileSourceRef = tdSource
         streamServerRef = StreamServer(chunks, tdSource).also { it.start() }
-        authMachineRef = AuthMachine(port!!, scope).also { it.start() }
-        indexerRef = ChannelIndexer(port!!, db.dao(), scope).also { it.start() }
+        authMachineRef = AuthMachine(port!!, scope).also { machine ->
+            machine.start()
+            scope.launch { machine.state.collect { authStateFlow.value = it } }
+            scope.launch { machine.lastError.collect { authErrorFlow.value = it } }
+        }
+        indexerRef = ChannelIndexer(port!!, db.dao(), scope, syncState).also { it.start() }
         scope.launch(Dispatchers.IO) { initTdlib(config) }
         return true
     }
@@ -127,6 +135,8 @@ class TelegramEngine(
         authMachineRef?.logout()
         port = null
         authMachineRef = null
+        authStateFlow.value = AuthState.Closed
+        authErrorFlow.value = null
         indexerRef = null
         streamServerRef?.stop(); streamServerRef = null
         chunksRef?.wipeAll()
@@ -139,6 +149,8 @@ class TelegramEngine(
     fun stop() {
         streamServerRef?.stop()
     }
+
+    fun isAuthenticated(): Boolean = authStateFlow.value == AuthState.Ready
 
     /** engine up: keys present, room and stream server running */
     fun isStarted(): Boolean = started.get() && streamServerRef != null

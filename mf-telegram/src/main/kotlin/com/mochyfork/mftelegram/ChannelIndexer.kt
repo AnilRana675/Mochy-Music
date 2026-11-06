@@ -9,6 +9,7 @@ import com.mochyfork.mftelegram.db.TrackEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.drinkless.tdlib.TdApi
 
 // history page size: 100 messages per call keeps request traffic low (clause 4)
@@ -25,6 +26,7 @@ class ChannelIndexer(
     private val port: TdPort,
     private val dao: TelegramDao,
     private val scope: CoroutineScope,
+    private val syncState: MutableStateFlow<SyncState> = MutableStateFlow(SyncState.Idle),
 ) {
     /** keep the index live once started: new audio, replaced content, deletions */
     fun start() {
@@ -55,14 +57,16 @@ class ChannelIndexer(
         val ids = mutableListOf<Long>()
         while (true) {
             // loadChats pulls one page off the server, code 404 means the list has run out
-            try {
+            val loadFinished = try {
                 port.send(TdApi.LoadChats(list, HistoryPageSize))
+                false
             } catch (e: TdError) {
-                if (e.code == 404) break else throw e
+                if (e.code == 404) true else throw e
             }
             val got = (port.send(TdApi.GetChats(list, HistoryPageSize)) as? TdApi.Chats)?.chatIds ?: longArrayOf()
             if (got.size == ids.size) break
             ids.apply { clear(); addAll(got.toList()) }
+            if (loadFinished) break
         }
         return ids.map { port.send(TdApi.GetChat(it)) as TdApi.Chat }
     }
@@ -108,11 +112,13 @@ class ChannelIndexer(
                         count = dao.trackCount(chatId)
                     }
                 }
+                syncState.value = SyncState.Scanning(chatId, count, lowestMessageId(messages))
                 var lowest = Long.MAX_VALUE
                 for (message in messages) if (message.id < lowest) lowest = message.id
                 dao.upsertChannel(channel.copy(scannedToId = lowest, trackCount = count, updatedAt = System.currentTimeMillis()))
                 fromMessageId = lowest
             }
+
         } catch (e: TdError) {
             // flood wait and friends stop the scan; the cursor never moves past good pages, so
             // this becomes a plain resync later
@@ -120,6 +126,9 @@ class ChannelIndexer(
         }
         return SyncState.Idle
     }
+
+    private fun lowestMessageId(messages: List<TdApi.Message>): Long =
+        messages.minOf { it.id }
 
     // tdlib getChatHistory: fromMessageId 0 = newest, otherwise messages older than fromMessageId
     suspend fun history(chatId: Long, fromMessageId: Long): List<TdApi.Message> {

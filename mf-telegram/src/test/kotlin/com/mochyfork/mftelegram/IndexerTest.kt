@@ -193,6 +193,24 @@ class IndexerTest {
         assertEquals(listOf(1001L), candidates.map { it.id })
     }
 
+    @Test fun listCandidatesReadsAnAlreadyLoadedChatList() = runTest {
+        val port = FakeTdPort()
+        val dao = FakeDao()
+        port.on<TdApi.LoadChats> {
+            throw TdError(404, "chat list is already loaded", 0)
+        }
+        port.on<TdApi.GetChats> {
+            TdApi.Chats(1, longArrayOf(1001L))
+        }
+        port.on<TdApi.GetChat> {
+            channel((it as TdApi.GetChat).chatId, true)
+        }
+
+        val candidates = ChannelIndexer(port, dao, backgroundScope).listCandidates()
+
+        assertEquals(listOf(1001L), candidates.map { it.id })
+    }
+
     @Test fun floodWaitStopsTheScanAndKeepsTheCursor() = runTest {
         val port = FakeTdPort()
         val dao = FakeDao()
